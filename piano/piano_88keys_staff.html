@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>88-Key Piano · Grand Staff</title>
+<style>
+  body { font-family: -apple-system, "PingFang SC", sans-serif; background:#1e1e24; color:#eee; margin:0; padding:16px; }
+  h2 { text-align:center; font-weight:600; margin:8px 0 14px; }
+  #main { max-width:1400px; margin:0 auto; }
+  #staffWrap { background:#fdfcf7; border-radius:10px; margin:0 auto 16px; width:820px; max-width:100%; }
+  svg { display:block; margin:0 auto; }
+  #info { text-align:center; font-size:22px; height:30px; margin-bottom:10px; color:#ffd54f; font-weight:600; }
+  /* 双排键电子琴布局：上排高音区，下排低音区，各44键，等宽铺满 */
+  #pianoWrap { background:linear-gradient(#26262c,#0d0d10); border-radius:14px; padding:18px 16px; box-shadow:0 6px 24px rgba(0,0,0,.5); }
+  .row { position:relative; height:150px; }
+  .row + .row { margin-top:16px; }
+  .white { position:absolute; top:0; height:100%; background:linear-gradient(#fff,#f2f2f2); border:1px solid #666; border-radius:0 0 4px 4px; box-sizing:border-box; cursor:pointer; }
+  .white:hover { background:#e8f0ff; }
+  .white.active { background:#ffd54f; }
+  .black { position:absolute; top:0; height:62%; background:linear-gradient(#333,#0a0a0a); border:1px solid #000; border-radius:0 0 3px 3px; box-sizing:border-box; cursor:pointer; z-index:2; }
+  .black:hover { background:#445; }
+  .black.active { background:#ff9800; }
+  .keylabel { position:absolute; bottom:4px; width:100%; text-align:center; font-size:10px; color:#999; pointer-events:none; }
+  .keylabel.c { color:#c33; font-weight:700; }
+  .rowtag { font-size:12px; color:#8a8a95; margin:0 0 4px 4px; }
+  #staffArea { display:flex; align-items:stretch; gap:14px; justify-content:center; margin-bottom:16px; }
+  #quizPanel { display:flex; flex-direction:column; justify-content:center; gap:10px; }
+  #quizBtn { padding:12px 22px; font-size:17px; font-weight:600; border:none; border-radius:10px; cursor:pointer; background:#4caf50; color:#fff; }
+  #quizBtn.stop { background:#e53935; }
+  #quizScore { text-align:center; font-size:14px; color:#bbb; white-space:nowrap; }
+  #helpBtn { padding:8px 22px; font-size:15px; border:1px solid #666; border-radius:10px; cursor:pointer; background:transparent; color:#ccc; }
+  #helpBtn:hover { background:#333; }
+  #helpModal { display:none; position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:10; }
+  #helpModal.show { display:flex; align-items:center; justify-content:center; }
+  #helpBox { background:#2a2a32; border-radius:14px; padding:24px 28px; max-width:760px; max-height:80vh; overflow:auto; box-shadow:0 10px 40px rgba(0,0,0,.6); }
+  #helpBox h3 { margin:0 0 12px; color:#ffd54f; }
+  #helpBox table { border-collapse:collapse; font-size:14px; margin-bottom:14px; }
+  #helpBox td, #helpBox th { border:1px solid #555; padding:4px 8px; text-align:center; }
+  #helpBox th { background:#3a3a44; }
+  #helpBox kbd { background:#444; border-radius:4px; padding:1px 7px; font-family:monospace; border:1px solid #666; }
+  #helpClose { margin-top:4px; padding:8px 20px; border:none; border-radius:8px; background:#4caf50; color:#fff; cursor:pointer; font-size:14px; }
+  .keylabel .kbd-hint { display:block; color:#4a7fd6; font-size:9px; font-family:monospace; }
+</style>
+</head>
+<body>
+<h2>88-Key Piano &amp; Grand Staff</h2>
+<div id="main">
+  <div id="staffArea">
+    <div id="staffWrap"><svg id="staff" width="820" height="330"></svg></div>
+    <div id="quizPanel">
+      <button id="quizBtn">▶ Start Practice</button>
+      <div id="quizScore"></div>
+      <button id="helpBtn">⌨ Help</button>
+    </div>
+  </div>
+  <div id="info">Click a key below ♪</div>
+  <div id="pianoWrap">
+    <div class="rowtag">Upper row · Lowest range A0 – G#2 ｜ Highest range F6 – C8</div>
+    <div class="row" id="rowTop"></div>
+    <div class="rowtag" style="margin-top:14px">Lower row · Common range A2 – E6 (incl. Middle C)</div>
+    <div class="row" id="rowBottom"></div>
+  </div>
+</div>
+
+<script>
+const NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+function noteInfo(midi){
+  const pc = midi % 12, oct = Math.floor(midi/12) - 1;
+  return { oct, sharp: NAMES[pc].includes('#'), letter: NAMES[pc][0], name: NAMES[pc] + oct };
+}
+const STEP = {C:0,D:1,E:2,F:3,G:4,A:5,B:6};
+function diatonic(midi){ const n = noteInfo(midi); return n.oct*7 + STEP[n.letter]; }
+
+// ===== 五线谱 =====
+const svg = document.getElementById('staff');
+const NS = 'http://www.w3.org/2000/svg';
+const W = 820, LS = 9;
+// 音高连续布局：两谱表之间只隔中央C一条线（E4 与 A3 相距 2×LS）
+const trebleMidY = 140, bassMidY = trebleMidY + 6*LS; // C4 从两个谱表算出的位置相同
+const B4 = diatonic(71), D3 = diatonic(50);
+function yFor(midi, clef){
+  const d = diatonic(midi);
+  return clef==='treble' ? trebleMidY - (d - B4)*(LS/2) : bassMidY - (d - D3)*(LS/2);
+}
+function sline(x1,y1,x2,y2,w=1){
+  const l=document.createElementNS(NS,'line');
+  l.setAttribute('x1',x1);l.setAttribute('y1',y1);l.setAttribute('x2',x2);l.setAttribute('y2',y2);
+  l.setAttribute('stroke','#333');l.setAttribute('stroke-width',w);svg.appendChild(l);
+}
+function stext(x,y,str,size){
+  const t=document.createElementNS(NS,'text');
+  t.setAttribute('x',x);t.setAttribute('y',y);t.setAttribute('font-size',size);
+  t.setAttribute('fill','#333');t.setAttribute('text-anchor','middle');
+  t.textContent=str;svg.appendChild(t);
+}
+for(let i=-2;i<=2;i++){ sline(30,trebleMidY+i*LS,W-20,trebleMidY+i*LS); sline(30,bassMidY+i*LS,W-20,bassMidY+i*LS); }
+// 两谱表之间的虚线（补齐中间缺的线，如中央C所在线）
+for(let y=trebleMidY+3*LS; y<=bassMidY-3*LS; y+=LS){
+  const l=document.createElementNS(NS,'line');
+  l.setAttribute('x1',30);l.setAttribute('y1',y);l.setAttribute('x2',W-20);l.setAttribute('y2',y);
+  l.setAttribute('stroke','#bbb');l.setAttribute('stroke-width',1);
+  l.setAttribute('stroke-dasharray','6 5');
+  svg.appendChild(l);
+}
+sline(30,trebleMidY-2*LS,30,bassMidY+2*LS,2);
+stext(52,trebleMidY+14,'𝄞',46);
+stext(52,bassMidY+8,'𝄢',34);
+const NOTE_X_MIN = 120, NOTE_X_MAX = W - 50;
+function noteX(midi){ return NOTE_X_MIN + (midi-21)/(108-21)*(NOTE_X_MAX-NOTE_X_MIN); }
+
+// ===== 双排键盘 =====
+// 下排：常用音区 A2–E6（26白键，含中央C）
+// 上排：左段 A0–G#2（14白键） + 空隙 + 右段 F6–C8（12白键）
+const keys = [];
+function buildSeg(rowEl, startMidi, endMidi, wPct, startSlot){
+  let wi = startSlot;
+  for(let midi=startMidi; midi<=endMidi; midi++){
+    const n = noteInfo(midi);
+    const el = document.createElement('div');
+    if(!n.sharp){
+      el.className='white';
+      el.style.left=(wi*wPct)+'%';
+      el.style.width=wPct+'%';
+      const lab=document.createElement('div');
+      lab.className='keylabel'+(n.name==='C4'?' c':'');
+      lab.textContent=n.name;
+      el.appendChild(lab);
+      wi++;
+    }else{
+      el.className='black';
+      el.style.left=(wi*wPct - wPct*0.32)+'%';
+      el.style.width=(wPct*0.62)+'%';
+    }
+    el.dataset.midi=midi;
+    rowEl.appendChild(el);
+    keys.push({midi,el});
+  }
+  return wi;
+}
+// 下排 A2(45)–E6(88)：26 个白键槽
+const BOT_SLOTS = 26;
+buildSeg(document.getElementById('rowBottom'), 45, 88, 100/BOT_SLOTS, 0);
+// 上排：14白 + 1空隙 + 12白 = 27 槽
+const TOP_SLOTS = 27, tw = 100/TOP_SLOTS;
+const rowTop = document.getElementById('rowTop');
+let slot = buildSeg(rowTop, 21, 44, tw, 0);   // A0–G#2
+buildSeg(rowTop, 89, 108, tw, slot + 1);       // F6–C8
+
+// ===== 点击 =====
+let noteGroup=null, ctx;
+function showNote(midi, opts={}){
+  if(noteGroup) noteGroup.remove();
+  document.querySelectorAll('.active').forEach(e=>e.classList.remove('active'));
+  if(!opts.hideKey){
+    const k = keys.find(k=>k.midi===midi);
+    k.el.classList.add('active');
+  }
+
+  const n = noteInfo(midi);
+  const clef = midi >= 60 ? 'treble' : 'bass';
+  const x = noteX(midi);
+  const y = yFor(midi, clef);
+
+  noteGroup = document.createElementNS(NS,'g');
+  svg.appendChild(noteGroup);
+
+  const mid = clef==='treble'?trebleMidY:bassMidY;
+  const topLine = mid-2*LS, botLine = mid+2*LS;
+  function ledger(ly){
+    const l=document.createElementNS(NS,'line');
+    l.setAttribute('x1',x-11);l.setAttribute('x2',x+11);l.setAttribute('y1',ly);l.setAttribute('y2',ly);
+    l.setAttribute('stroke','#333');noteGroup.appendChild(l);
+  }
+  for(let ly=topLine-LS; ly>=y-2; ly-=LS) ledger(ly);
+  for(let ly=botLine+LS; ly<=y+2; ly+=LS) ledger(ly);
+
+  const e=document.createElementNS(NS,'ellipse');
+  e.setAttribute('cx',x);e.setAttribute('cy',y);e.setAttribute('rx',6.5);e.setAttribute('ry',4.8);
+  e.setAttribute('fill','#d32f2f');e.setAttribute('transform',`rotate(-15 ${x} ${y})`);
+  noteGroup.appendChild(e);
+
+  const stemUp = y > mid;
+  const stem=document.createElementNS(NS,'line');
+  stem.setAttribute('x1',stemUp?x+6:x-6);stem.setAttribute('x2',stemUp?x+6:x-6);
+  stem.setAttribute('y1',y);stem.setAttribute('y2',stemUp?y-30:y+30);
+  stem.setAttribute('stroke','#d32f2f');stem.setAttribute('stroke-width',1.5);
+  noteGroup.appendChild(stem);
+
+  if(n.sharp){
+    const s=document.createElementNS(NS,'text');
+    s.setAttribute('x',x-16);s.setAttribute('y',y+5);s.setAttribute('font-size',16);
+    s.setAttribute('fill','#d32f2f');s.setAttribute('text-anchor','middle');s.textContent='♯';
+    noteGroup.appendChild(s);
+  }
+  if(!opts.hideLabel){
+    const lbl=document.createElementNS(NS,'text');
+    lbl.setAttribute('x',x);
+    lbl.setAttribute('y',clef==='treble'? Math.min(y,trebleMidY-2*LS)-18 : Math.max(y,bassMidY+2*LS)+28);
+    lbl.setAttribute('font-size',18);lbl.setAttribute('font-weight','bold');
+    lbl.setAttribute('fill','#1565c0');lbl.setAttribute('text-anchor','middle');
+    lbl.textContent=n.name;
+    noteGroup.appendChild(lbl);
+  }
+
+  document.getElementById('info').textContent = opts.hideLabel ? 'Which key is this?' : `${n.name} (${clef==='treble'?'treble clef':'bass clef'})`;
+  if(!opts.silent) playTone(440*Math.pow(2,(midi-69)/12));
+}
+function playTone(freq){
+  ctx = ctx || new (window.AudioContext||window.webkitAudioContext)();
+  const o=ctx.createOscillator(), g=ctx.createGain();
+  o.type='triangle'; o.frequency.value=freq;
+  g.gain.setValueAtTime(0.25,ctx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+1);
+  o.connect(g); g.connect(ctx.destination);
+  o.start(); o.stop(ctx.currentTime+1);
+}
+// ===== 练习模式 =====
+let quizOn = false, quizTarget = null, quizRight = 0, quizTotal = 0;
+const quizBtn = document.getElementById('quizBtn');
+const quizScore = document.getElementById('quizScore');
+// 加权随机：中央66键（E1–A6，midi 32–97）权重3，两端各11键权重1
+const QUIZ_POOL = [];
+for(let m=21; m<=108; m++){
+  const w = (m>=32 && m<=97) ? 3 : 1;
+  for(let i=0;i<w;i++) QUIZ_POOL.push(m);
+}
+function nextQuiz(){
+  let m;
+  do { m = QUIZ_POOL[Math.floor(Math.random()*QUIZ_POOL.length)]; } while(m === quizTarget);
+  quizTarget = m;
+  showNote(m, {hideLabel:true, hideKey:true, silent:true});
+}
+function updateScore(){ quizScore.textContent = `Correct ${quizRight} / ${quizTotal}`; }
+quizBtn.addEventListener('click',()=>{
+  quizOn = !quizOn;
+  if(quizOn){
+    quizRight = quizTotal = 0;
+    quizBtn.textContent = '⏹ Stop Practice';
+    quizBtn.classList.add('stop');
+    updateScore();
+    nextQuiz();
+  }else{
+    quizBtn.textContent = '▶ Start Practice';
+    quizBtn.classList.remove('stop');
+    quizTarget = null;
+    document.getElementById('info').textContent = `Practice finished: ${quizRight} / ${quizTotal} correct`;
+    if(noteGroup) noteGroup.remove();
+    document.querySelectorAll('.active').forEach(e=>e.classList.remove('active'));
+  }
+});
+
+function pressKey(m){
+  if(quizOn){
+    quizTotal++;
+    playTone(440*Math.pow(2,(m-69)/12));
+    if(m === quizTarget){
+      quizRight++;
+      updateScore();
+      document.getElementById('info').textContent = `✅ Correct! It's ${noteInfo(m).name}`;
+      setTimeout(()=>{ if(quizOn) nextQuiz(); }, 600);
+    }else{
+      updateScore();
+      document.getElementById('info').textContent = `❌ That was ${noteInfo(m).name}, try again`;
+    }
+  }else{
+    showNote(m);
+  }
+}
+document.getElementById('pianoWrap').addEventListener('click',e=>{
+  const midi = e.target.closest('[data-midi]')?.dataset.midi;
+  if(midi) pressKey(+midi);
+});
+
+// ===== 电脑键盘快捷键（映射下排常用音区）=====
+// 下面一行字母 → A2–B3；上面一行字母/数字 → C4–E5；[ ] \ → F5 G5 A5
+const KEYMAP = {
+  'z':45,'s':46,'x':47,'c':48,'f':49,'v':50,'g':51,'b':52,'n':53,'j':54,'m':55,'k':56,',':57,'l':58,'.':59,
+  'q':60,'2':61,'w':62,'3':63,'e':64,'r':65,'5':66,'t':67,'6':68,'y':69,'7':70,'u':71,
+  'i':72,'9':73,'o':74,'0':75,'p':76,'[':77,']':79,'\\':81
+};
+document.addEventListener('keydown',e=>{
+  if(e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+  const m = KEYMAP[e.key.toLowerCase()];
+  if(m !== undefined){ e.preventDefault(); pressKey(m); }
+});
+
+// ===== Help 弹窗 =====
+const helpModal=document.createElement('div');
+helpModal.id='helpModal';
+function mapRows(pairs){
+  return pairs.map(([kb,m])=>`<tr><td><kbd>${kb.toUpperCase()}</kbd></td><td>${noteInfo(m).name}</td></tr>`).join('');
+}
+const entries=Object.entries(KEYMAP);
+const half=Math.ceil(entries.length/2);
+helpModal.innerHTML=`
+  <div id="helpBox">
+    <h3>⌨ Keyboard Shortcuts (lower row keys)</h3>
+    <p style="color:#aaa;font-size:13px;margin:0 0 10px">Bottom letter row (Z X C…) maps to A2–B3, top letter row (Q W E…) to C4–E5, number row plays black keys (sharps), and [ ] \\ map to F5 G5 A5.</p>
+    <div style="display:flex;gap:20px">
+      <table><tr><th>Key</th><th>Note</th></tr>${mapRows(entries.slice(0,half))}</table>
+      <table><tr><th>Key</th><th>Note</th></tr>${mapRows(entries.slice(half))}</table>
+    </div>
+    <button id="helpClose">Close</button>
+  </div>`;
+document.body.appendChild(helpModal);
+document.getElementById('helpBtn').onclick=()=>helpModal.classList.add('show');
+document.getElementById('helpClose').onclick=()=>helpModal.classList.remove('show');
+helpModal.addEventListener('click',e=>{ if(e.target===helpModal) helpModal.classList.remove('show'); });
+</script>
+</body>
+</html>
