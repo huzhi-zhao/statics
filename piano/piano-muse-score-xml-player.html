@@ -1,109 +1,109 @@
 <!doctype html>
-<html lang="zh">
+<html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>琴谱播放器 · Score Player</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tonejs/midi@2.0.28/build/Midi.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/opensheetmusicdisplay@1.8.7/build/opensheetmusicdisplay.min.js"></script>
-<style>
-  :root{
-    --bg:#14161c; --panel:#1c1f28; --panel-2:#242835;
-    --ink:#e8eaf0; --muted:#8b90a0; --line:#2e3342;
-    --accent:#5ac8b0; --accent-warm:#e0a458; --danger:#e06a6a;
-    --key-active:#5ac8b0;
-    --font:"Segoe UI",system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
-    --mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
-  }
-  *{box-sizing:border-box}
-  html,body{margin:0;height:100%}
-  body{background:var(--bg);color:var(--ink);font-family:var(--font);display:flex;flex-direction:column;overflow:hidden}
-  header{display:flex;align-items:center;gap:16px;padding:12px 18px;background:var(--panel);border-bottom:1px solid var(--line)}
-  header h1{font-size:15px;font-weight:600;letter-spacing:.5px;margin:0}
-  header h1 .dot{color:var(--accent)}
-  header .sub{font-size:12px;color:var(--muted)}
-  header .spacer{flex:1}
-  button{font-family:var(--font);cursor:pointer;border:1px solid var(--line);background:var(--panel-2);color:var(--ink);border-radius:8px;padding:8px 12px;font-size:13px;transition:.15s}
-  button:hover{border-color:var(--accent);color:#fff}
-  button:disabled{opacity:.4;cursor:not-allowed;border-color:var(--line)}
-  button.primary{background:var(--accent);color:#0c1512;border-color:var(--accent);font-weight:600}
-  button.primary:hover{filter:brightness(1.08)}
-  .btn-ghost{background:transparent}
-  label.file{display:inline-flex;align-items:center;gap:6px}
-  label.file input{display:none}
-  main{flex:1;display:flex;flex-direction:column;min-height:0}
-  #stage{flex:1;min-height:0;position:relative;overflow:auto;background:#0f1116}
-  #osmd{background:#fbfaf6;color:#111;padding:12px;display:none}
-  #roll{display:block;width:100%;height:100%;background:#0f1116}
-  #hint{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--muted);gap:10px;text-align:center;padding:20px;pointer-events:none}
-  #hint b{color:var(--ink);font-weight:600}
-  #nowNote{position:absolute;top:10px;left:14px;font-family:var(--mono);font-size:12px;color:var(--accent);background:#0009;padding:4px 8px;border-radius:6px}
-  .transport{display:flex;align-items:center;gap:14px;padding:10px 18px;background:var(--panel);border-top:1px solid var(--line);flex-wrap:wrap}
-  .transport .grp{display:flex;align-items:center;gap:8px}
-  .transport .lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
-  input[type=range]{accent-color:var(--accent)}
-  #progress{flex:1;min-width:120px}
-  #tempoVal,#timeVal{font-family:var(--mono);font-size:12px;color:var(--ink);min-width:44px;text-align:right}
-  #pianoWrap{background:var(--panel);border-top:1px solid var(--line);padding:8px 10px 12px;overflow-x:auto}
-  #piano{position:relative;height:120px;margin:0 auto;min-width:900px}
-  .wkey{position:absolute;bottom:0;top:0;border:1px solid #b9bcc7;border-top:none;background:linear-gradient(#fff,#eef0f4);border-radius:0 0 4px 4px;box-shadow:inset 0 -3px 4px #0001}
-  .wkey.on{background:linear-gradient(var(--key-active),#3fae97);border-color:#2c9a83}
-  .bkey{position:absolute;top:0;height:62%;background:linear-gradient(#2a2d38,#0d0f14);border-radius:0 0 3px 3px;box-shadow:inset 0 -4px 3px #fff2,0 2px 3px #000a;z-index:2}
-  .bkey.on{background:linear-gradient(var(--accent-warm),#b87d34)}
-  .wkey .lab{position:absolute;bottom:3px;left:0;right:0;text-align:center;font-size:8px;color:#9aa;font-family:var(--mono)}
-  .modal{position:fixed;inset:0;background:#000a;display:none;align-items:center;justify-content:center;z-index:50}
-  .modal.open{display:flex}
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;width:min(560px,92vw);max-height:88vh;overflow:auto;padding:22px}
-  .card h2{margin:0 0 4px;font-size:16px}
-  .card p.desc{margin:0 0 14px;font-size:12px;color:var(--muted);line-height:1.6}
-  .warn{background:#22303a;border:1px solid #38566b;color:#a9d3ec;font-size:12px;line-height:1.6;padding:9px 11px;border-radius:8px;margin-bottom:14px}
-  .urlrow{display:flex;gap:8px}
-  .urlrow input{flex:1;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;color:var(--ink);padding:10px 11px;font-size:13px;font-family:var(--mono)}
-  .histhead{display:flex;justify-content:space-between;align-items:center;margin:18px 0 6px;font-size:12px;color:var(--muted)}
-  .histhead a{color:var(--danger);cursor:pointer;text-decoration:none}
-  .hist{border-top:1px solid var(--line)}
-  .hitem{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 4px;border-bottom:1px solid var(--line)}
-  .hitem .info{min-width:0;cursor:pointer;flex:1}
-  .hitem .info .nm{font-size:13px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .hitem .info .u{font-size:11px;color:var(--muted);font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .hitem .del{color:var(--muted);cursor:pointer;padding:2px 6px;border-radius:4px;font-size:14px}
-  .hitem .del:hover{color:var(--danger);background:var(--panel-2)}
-  .card .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
-  .status{font-size:12px;color:var(--muted);margin-top:10px;min-height:16px}
-  .status.err{color:var(--danger)} .status.ok{color:var(--accent)}
-  .empty{color:var(--muted);font-size:12px;padding:14px 4px;text-align:center}
-  #osmd{cursor:pointer}
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Score Player</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tonejs/midi@2.0.28/build/Midi.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/opensheetmusicdisplay@1.8.7/build/opensheetmusicdisplay.min.js"></script>
+  <style>
+    :root{
+      --bg:#14161c; --panel:#1c1f28; --panel-2:#242835;
+      --ink:#e8eaf0; --muted:#8b90a0; --line:#2e3342;
+      --accent:#5ac8b0; --accent-warm:#e0a458; --danger:#e06a6a;
+      --key-active:#5ac8b0;
+      --font:"Segoe UI",system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+      --mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;height:100%}
+    body{background:var(--bg);color:var(--ink);font-family:var(--font);display:flex;flex-direction:column;overflow:hidden}
+    header{display:flex;align-items:center;gap:16px;padding:12px 18px;background:var(--panel);border-bottom:1px solid var(--line)}
+    header h1{font-size:15px;font-weight:600;letter-spacing:.5px;margin:0}
+    header h1 .dot{color:var(--accent)}
+    header .sub{font-size:12px;color:var(--muted)}
+    header .spacer{flex:1}
+    button{font-family:var(--font);cursor:pointer;border:1px solid var(--line);background:var(--panel-2);color:var(--ink);border-radius:8px;padding:8px 12px;font-size:13px;transition:.15s}
+    button:hover{border-color:var(--accent);color:#fff}
+    button:disabled{opacity:.4;cursor:not-allowed;border-color:var(--line)}
+    button.primary{background:var(--accent);color:#0c1512;border-color:var(--accent);font-weight:600}
+    button.primary:hover{filter:brightness(1.08)}
+    .btn-ghost{background:transparent}
+    label.file{display:inline-flex;align-items:center;gap:6px}
+    label.file input{display:none}
+    main{flex:1;display:flex;flex-direction:column;min-height:0}
+    #stage{flex:1;min-height:0;position:relative;overflow:auto;background:#0f1116}
+    #osmd{background:#fbfaf6;color:#111;padding:12px;display:none}
+    #roll{display:block;width:100%;height:100%;background:#0f1116}
+    #hint{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--muted);gap:10px;text-align:center;padding:20px;pointer-events:none}
+    #hint b{color:var(--ink);font-weight:600}
+    #nowNote{position:absolute;top:10px;left:14px;font-family:var(--mono);font-size:12px;color:var(--accent);background:#0009;padding:4px 8px;border-radius:6px}
+    .transport{display:flex;align-items:center;gap:14px;padding:10px 18px;background:var(--panel);border-top:1px solid var(--line);flex-wrap:wrap}
+    .transport .grp{display:flex;align-items:center;gap:8px}
+    .transport .lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+    input[type=range]{accent-color:var(--accent)}
+    #progress{flex:1;min-width:120px}
+    #tempoVal,#timeVal{font-family:var(--mono);font-size:12px;color:var(--ink);min-width:44px;text-align:right}
+    #pianoWrap{background:var(--panel);border-top:1px solid var(--line);padding:8px 10px 12px;overflow-x:auto}
+    #piano{position:relative;height:120px;margin:0 auto;min-width:900px}
+    .wkey{position:absolute;bottom:0;top:0;border:1px solid #b9bcc7;border-top:none;background:linear-gradient(#fff,#eef0f4);border-radius:0 0 4px 4px;box-shadow:inset 0 -3px 4px #0001}
+    .wkey.on{background:linear-gradient(var(--key-active),#3fae97);border-color:#2c9a83}
+    .bkey{position:absolute;top:0;height:62%;background:linear-gradient(#2a2d38,#0d0f14);border-radius:0 0 3px 3px;box-shadow:inset 0 -4px 3px #fff2,0 2px 3px #000a;z-index:2}
+    .bkey.on{background:linear-gradient(var(--accent-warm),#b87d34)}
+    .wkey .lab{position:absolute;bottom:3px;left:0;right:0;text-align:center;font-size:8px;color:#9aa;font-family:var(--mono)}
+    .modal{position:fixed;inset:0;background:#000a;display:none;align-items:center;justify-content:center;z-index:50}
+    .modal.open{display:flex}
+    .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;width:min(560px,92vw);max-height:88vh;overflow:auto;padding:22px}
+    .card h2{margin:0 0 4px;font-size:16px}
+    .card p.desc{margin:0 0 14px;font-size:12px;color:var(--muted);line-height:1.6}
+    .warn{background:#22303a;border:1px solid #38566b;color:#a9d3ec;font-size:12px;line-height:1.6;padding:9px 11px;border-radius:8px;margin-bottom:14px}
+    .urlrow{display:flex;gap:8px}
+    .urlrow input{flex:1;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;color:var(--ink);padding:10px 11px;font-size:13px;font-family:var(--mono)}
+    .histhead{display:flex;justify-content:space-between;align-items:center;margin:18px 0 6px;font-size:12px;color:var(--muted)}
+    .histhead a{color:var(--danger);cursor:pointer;text-decoration:none}
+    .hist{border-top:1px solid var(--line)}
+    .hitem{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 4px;border-bottom:1px solid var(--line)}
+    .hitem .info{min-width:0;cursor:pointer;flex:1}
+    .hitem .info .nm{font-size:13px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .hitem .info .u{font-size:11px;color:var(--muted);font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .hitem .del{color:var(--muted);cursor:pointer;padding:2px 6px;border-radius:4px;font-size:14px}
+    .hitem .del:hover{color:var(--danger);background:var(--panel-2)}
+    .card .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+    .status{font-size:12px;color:var(--muted);margin-top:10px;min-height:16px}
+    .status.err{color:var(--danger)} .status.ok{color:var(--accent)}
+    .empty{color:var(--muted);font-size:12px;padding:14px 4px;text-align:center}
+    #osmd{cursor:pointer}
 
-  /* ===== 手机横屏适配：压缩上下留白，键盘高度 -40% ===== */
-  @media (orientation:landscape) and (max-height:500px){
-    header{padding:4px 10px;gap:8px}
-    header h1{font-size:12px}
-    header .sub{display:none}
-    button{padding:4px 8px;font-size:11px;border-radius:6px}
-    .transport{padding:3px 10px;gap:8px}
-    .transport .lbl{font-size:8px}
-    #tempoVal,#timeVal{font-size:10px;min-width:34px}
-    #osmd{padding:4px}
-    #nowNote{font-size:10px;padding:2px 6px;top:4px;left:6px}
-    #pianoWrap{padding:2px 4px 4px}
-    #piano{height:72px}
-    .wkey .lab{font-size:6px;bottom:1px}
-  }
-</style>
+    /* ===== Mobile landscape adaptation: reduce top/bottom padding, keyboard height -40% ===== */
+    @media (orientation:landscape) and (max-height:500px){
+      header{padding:4px 10px;gap:8px}
+      header h1{font-size:12px}
+      header .sub{display:none}
+      button{padding:4px 8px;font-size:11px;border-radius:6px}
+      .transport{padding:3px 10px;gap:8px}
+      .transport .lbl{font-size:8px}
+      #tempoVal,#timeVal{font-size:10px;min-width:34px}
+      #osmd{padding:4px}
+      #nowNote{font-size:10px;padding:2px 6px;top:4px;left:6px}
+      #pianoWrap{padding:2px 4px 4px}
+      #piano{height:72px}
+      .wkey .lab{font-size:6px;bottom:1px}
+    }
+  </style>
 </head>
 <body>
 <header>
-  <h1><span class="dot">●</span> 琴谱播放器</h1>
-  <span class="sub">MIDI / MusicXML · 88 键联动 · 纯前端</span>
+  <h1><span class="dot">●</span> Score Player</h1>
+  <span class="sub">MIDI / MusicXML · 88-key sync · Pure frontend</span>
   <div class="spacer"></div>
   <label class="file">
-    <button class="btn-ghost" onclick="document.getElementById('fileInput').click()">📂 本地文件</button>
+    <button class="btn-ghost" onclick="document.getElementById('fileInput').click()">📂 Local File</button>
     <input id="fileInput" type="file" accept=".mid,.midi,.xml,.musicxml,.mxl">
   </label>
-  <button class="btn-ghost" id="urlBtn">🔗 在线 URL</button>
-  <button class="btn-ghost" id="soundBtn" title="部分手机浏览器 / iframe 嵌入场景需要手动点一下才能出声" style="display: none">🔇 开启声音</button>
-  <button class="btn-ghost" ><a href="piano_88keys_staff.html">练习音符</a></button>
+  <button class="btn-ghost" id="urlBtn">🔗 Online URL</button>
+  <button class="btn-ghost" id="soundBtn" title="Some mobile browsers / iframe embeds require a manual tap to enable sound" style="display: none">🔇 Enable Sound</button>
+  <button class="btn-ghost" ><a href="piano_88keys_staff.html">Practice Notes</a></button>
 
 </header>
 
@@ -113,22 +113,22 @@
     <div id="osmd"></div>
     <div id="nowNote" style="display:none"></div>
     <div id="hint">
-      <b>打开 .mid / .musicxml 文件，或粘贴在线 URL</b>
-      <span>MIDI → 钢琴卷帘 + 自动演奏 · MusicXML → 五线谱 + 光标跟随</span>
+      <b>Open a .mid / .musicxml file, or paste an online URL</b>
+      <span>MIDI → Piano roll + auto playback · MusicXML → Sheet music + cursor follow</span>
     </div>
   </div>
   <div class="transport">
     <div class="grp">
-      <button class="primary" id="playBtn" disabled>▶ 播放</button>
-      <button id="stopBtn" disabled>■ 停止</button>
+      <button class="primary" id="playBtn" disabled>▶ Play</button>
+      <button id="stopBtn" disabled>■ Stop</button>
     </div>
     <div class="grp" style="flex:1">
-      <span class="lbl">进度</span>
+      <span class="lbl">Progress</span>
       <input id="progress" type="range" min="0" max="1000" value="0" disabled>
       <span id="timeVal">0:00</span>
     </div>
     <div class="grp">
-      <span class="lbl">速度</span>
+      <span class="lbl">Speed</span>
       <input id="tempo" type="range" min="30" max="200" value="100">
       <span id="tempoVal">100%</span>
     </div>
@@ -138,422 +138,441 @@
 
 <div class="modal" id="urlModal">
   <div class="card">
-    <h2>从在线 URL 加载</h2>
-    <p class="desc">粘贴任意可访问的 .mid / .musicxml 文件直链（S3 public、CDN、自建服务器都行）。历史记录保存在本机浏览器。</p>
-    <div class="warn">📎 目标服务器需允许跨域访问（CORS: <code>Access-Control-Allow-Origin</code>）。你自己的 MinIO / Nginx 加一条允许 GET 的规则即可。</div>
+    <h2>Load from online URL</h2>
+    <p class="desc">Paste a direct link to any accessible .mid / .musicxml file (S3 public, CDN, your own server all work). History is saved locally in your browser.</p>
+    <div class="warn">📎 The target server must allow cross-origin access (CORS: <code>Access-Control-Allow-Origin</code>). Just add a rule allowing GET on your own MinIO / Nginx.</div>
     <div class="urlrow">
       <input id="urlInput" placeholder="https://s3.jimmypink.dpdns.org/jimmypersonal/scores/elise.mid">
-      <button class="primary" id="loadUrlBtn">加载</button>
+      <button class="primary" id="loadUrlBtn">Load</button>
     </div>
     <div class="status" id="urlStatus"></div>
-    <div class="histhead"><span>历史记录</span><a id="clearHist">清空</a></div>
+    <div class="histhead"><span>History</span><a id="clearHist">Clear</a></div>
     <div class="hist" id="hist"></div>
-    <div class="actions"><button class="btn-ghost" id="urlClose">关闭</button></div>
+    <div class="actions"><button class="btn-ghost" id="urlClose">Close</button></div>
   </div>
 </div>
 
 <script>
-/* ========== localStorage 安全封装（预览环境自动降级为内存） ========== */
-const store=(()=>{
-  let ok=true; try{const k='__t';localStorage.setItem(k,'1');localStorage.removeItem(k);}catch(e){ok=false;}
-  const mem={};
-  return {
-    get(k){ try{return ok?localStorage.getItem(k):(mem[k]??null);}catch(e){return mem[k]??null;} },
-    set(k,v){ try{ok?localStorage.setItem(k,v):(mem[k]=v);}catch(e){mem[k]=v;} },
-    persistent:ok
-  };
-})();
-const HIST_KEY='pianoScore.history';
-function getHistory(){ try{return JSON.parse(store.get(HIST_KEY)||'[]');}catch(e){return [];} }
-function saveHistory(h){ store.set(HIST_KEY,JSON.stringify(h.slice(0,30))); }
-function addHistory(url){
-  const name=decodeURIComponent(url.split('/').pop().split('?')[0])||url;
-  let h=getHistory().filter(x=>x.url!==url);
-  h.unshift({url,name,ts:Date.now()});
-  saveHistory(h); renderHistory();
-}
-function renderHistory(){
-  const box=document.getElementById('hist'); const h=getHistory();
-  if(!h.length){box.innerHTML='<div class="empty">还没有历史记录</div>';return;}
-  box.innerHTML='';
-  h.forEach(it=>{
-    const row=document.createElement('div');row.className='hitem';
-    row.innerHTML=`<div class="info"><div class="nm">${it.name}</div><div class="u">${it.url}</div></div><div class="del" title="删除">✕</div>`;
-    row.querySelector('.info').onclick=()=>{document.getElementById('urlInput').value=it.url;loadFromUrl(it.url);};
-    row.querySelector('.del').onclick=(e)=>{e.stopPropagation();saveHistory(getHistory().filter(x=>x.url!==it.url));renderHistory();};
-    box.appendChild(row);
-  });
-}
+  /* ========== localStorage safe wrapper (falls back to in-memory in preview environments) ========== */
+  const store=(()=>{
+    let ok=true; try{const k='__t';localStorage.setItem(k,'1');localStorage.removeItem(k);}catch(e){ok=false;}
+    const mem={};
+    return {
+      get(k){ try{return ok?localStorage.getItem(k):(mem[k]??null);}catch(e){return mem[k]??null;} },
+      set(k,v){ try{ok?localStorage.setItem(k,v):(mem[k]=v);}catch(e){mem[k]=v;} },
+      persistent:ok
+    };
+  })();
+  const HIST_KEY='pianoScore.history';
+  function getHistory(){ try{return JSON.parse(store.get(HIST_KEY)||'[]');}catch(e){return [];} }
+  function saveHistory(h){ store.set(HIST_KEY,JSON.stringify(h.slice(0,30))); }
+  function addHistory(url){
+    const name=decodeURIComponent(url.split('/').pop().split('?')[0])||url;
+    let h=getHistory().filter(x=>x.url!==url);
+    h.unshift({url,name,ts:Date.now()});
+    saveHistory(h); renderHistory();
+  }
+  function renderHistory(){
+    const box=document.getElementById('hist'); const h=getHistory();
+    if(!h.length){box.innerHTML='<div class="empty">No history yet</div>';return;}
+    box.innerHTML='';
+    h.forEach(it=>{
+      const row=document.createElement('div');row.className='hitem';
+      row.innerHTML=`<div class="info"><div class="nm">${it.name}</div><div class="u">${it.url}</div></div><div class="del" title="Delete">✕</div>`;
+      row.querySelector('.info').onclick=()=>{document.getElementById('urlInput').value=it.url;loadFromUrl(it.url);};
+      row.querySelector('.del').onclick=(e)=>{e.stopPropagation();saveHistory(getHistory().filter(x=>x.url!==it.url));renderHistory();};
+      box.appendChild(row);
+    });
+  }
 
-/* ========== 88 键 ========== */
-const A0=21,C8=108;
-const NAMES=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
-const isBlack=m=>[1,3,6,8,10].includes(m%12);
-const noteName=m=>NAMES[m%12]+(Math.floor(m/12)-1);
-const keyEls={};
-function buildPiano(){
-  const piano=document.getElementById('piano');piano.innerHTML='';
-  const whites=[];for(let m=A0;m<=C8;m++)if(!isBlack(m))whites.push(m);
-  const wW=100/whites.length;let wi=0;const whiteIdx={};
-  for(let m=A0;m<=C8;m++){if(!isBlack(m)){
-    const el=document.createElement('div');el.className='wkey';
-    el.style.left=(wi*wW)+'%';el.style.width=wW+'%';
-    if(m%12===0){const l=document.createElement('div');l.className='lab';l.textContent=noteName(m);el.appendChild(l);}
-    piano.appendChild(el);keyEls[m]=el;whiteIdx[m]=wi;wi++;
-  }}
-  for(let m=A0;m<=C8;m++){if(isBlack(m)){
-    const el=document.createElement('div');el.className='bkey';
-    el.style.left=((whiteIdx[m-1]+0.66)*wW)+'%';el.style.width=(wW*0.62)+'%';
-    piano.appendChild(el);keyEls[m]=el;
-  }}
-}
-function keyOn(m){const e=keyEls[m];if(e)e.classList.add('on');}
-function keyOff(m){const e=keyEls[m];if(e)e.classList.remove('on');}
-function allKeysOff(){for(const m in keyEls)keyEls[m].classList.remove('on');}
-buildPiano();
+  /* ========== 88 keys ========== */
+  const A0=21,C8=108;
+  const NAMES=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+  const isBlack=m=>[1,3,6,8,10].includes(m%12);
+  const noteName=m=>NAMES[m%12]+(Math.floor(m/12)-1);
+  const keyEls={};
+  function buildPiano(){
+    const piano=document.getElementById('piano');piano.innerHTML='';
+    const whites=[];for(let m=A0;m<=C8;m++)if(!isBlack(m))whites.push(m);
+    const wW=100/whites.length;let wi=0;const whiteIdx={};
+    for(let m=A0;m<=C8;m++){if(!isBlack(m)){
+      const el=document.createElement('div');el.className='wkey';
+      el.style.left=(wi*wW)+'%';el.style.width=wW+'%';
+      if(m%12===0){const l=document.createElement('div');l.className='lab';l.textContent=noteName(m);el.appendChild(l);}
+      piano.appendChild(el);keyEls[m]=el;whiteIdx[m]=wi;wi++;
+    }}
+    for(let m=A0;m<=C8;m++){if(isBlack(m)){
+      const el=document.createElement('div');el.className='bkey';
+      el.style.left=((whiteIdx[m-1]+0.66)*wW)+'%';el.style.width=(wW*0.62)+'%';
+      piano.appendChild(el);keyEls[m]=el;
+    }}
+  }
+  function keyOn(m){const e=keyEls[m];if(e)e.classList.add('on');}
+  function keyOff(m){const e=keyEls[m];if(e)e.classList.remove('on');}
+  function allKeysOff(){for(const m in keyEls)keyEls[m].classList.remove('on');}
+  buildPiano();
 
-/* ========== 合成器 ========== */
-let synth;
-function initSynth(){if(synth)return;
-  synth=new Tone.PolySynth(Tone.Synth,{oscillator:{type:'triangle'},envelope:{attack:.005,decay:.2,sustain:.25,release:.9}}).toDestination();
-  synth.volume.value=-6;
-}
+  /* ========== Synth ========== */
+  let synth;
+  function initSynth(){if(synth)return;
+    synth=new Tone.PolySynth(Tone.Synth,{oscillator:{type:'triangle'},envelope:{attack:.005,decay:.2,sustain:.25,release:.9}}).toDestination();
+    synth.volume.value=-6;
+  }
 
-/* ========== iOS / Siri / iframe 嵌入场景 无声音修复 ==========
-   两类常见原因：
-   1) WKWebView / Siri 浏览器：AudioContext 手势后仍是 suspended，需要在真实手势里同步 resume。
-   2) 被 <iframe> 嵌入到别的页面（比如 memobase 项目里）：
-      - 有些浏览器（尤其 Android Chrome）对跨域 iframe 里的音频有更严格的策略，
-        父页面的 <iframe> 标签最好加上 allow="autoplay" 属性（这个需要在嵌入方那边加，
-        本文件自身无法修改父页面）。
-      - 更常见的情况是：iframe 内容首次加载时，用户的点击手势并没有"发生在 iframe 内部"
-        （比如先点了外层页面的什么东西），导致 iframe 里的 AudioContext 一直没被真正的
-        用户手势解锁过。所以这里额外提供一个可见的"开启声音"按钮，
-        用户在 iframe 内部直接点一下，必定会带上有效手势。 */
-let audioUnlocked=false;
-const SILENT_WAV='data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
-const soundBtn=document.getElementById('soundBtn');
-function setSoundBtnState(){
-  if(!soundBtn)return;
-  const running=Tone.context&&Tone.context.state==='running';
-  soundBtn.textContent=running?'🔊 声音已开启':'🔇 开启声音';
-  soundBtn.style.borderColor=running?'var(--accent)':'';
-}
-async function unlockAudio(){
-  try{ if(Tone.context.state!=='running') await Tone.context.resume(); }catch(e){}
-  try{ await Tone.start(); }catch(e){}
-  if(!audioUnlocked){
-    audioUnlocked=true;
+  /* ========== iOS / Siri / iframe embedding: fix for no sound ==========
+     Two common causes:
+     1) WKWebView / Siri browser: the AudioContext may still be suspended after a gesture,
+        so it needs to be resumed synchronously within a real gesture.
+     2) Embedded in an <iframe> on another page:
+        - Some browsers (especially Android Chrome) enforce stricter audio policies for
+          cross-origin iframes. The parent page's <iframe> tag should ideally include an
+          allow="autoplay" attribute (this must be added on the embedding side; this file
+          cannot modify the parent page).
+        - More commonly: on first load inside the iframe, the user's click gesture didn't
+          actually "occur inside the iframe" (e.g. they clicked something on the outer page
+          first), so the AudioContext inside the iframe never gets unlocked by a genuine
+          user gesture. So we provide a visible "Enable Sound" button here, letting the
+          user click directly inside the iframe, which guarantees a valid gesture. */
+  let audioUnlocked=false;
+  const SILENT_WAV='data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
+  const soundBtn=document.getElementById('soundBtn');
+  function setSoundBtnState(){
+    if(!soundBtn)return;
+    const running=Tone.context&&Tone.context.state==='running';
+    soundBtn.textContent=running?'🔊 Sound Enabled':'🔇 Enable Sound';
+    soundBtn.style.borderColor=running?'var(--accent)':'';
+  }
+  async function unlockAudio(){
+    try{ if(Tone.context.state!=='running') await Tone.context.resume(); }catch(e){}
+    try{ await Tone.start(); }catch(e){}
+    if(!audioUnlocked){
+      audioUnlocked=true;
+      try{
+        const a=new Audio(SILENT_WAV);
+        a.setAttribute('playsinline','');
+        a.muted=false;a.volume=.001;
+        const p=a.play();if(p&&p.catch)p.catch(()=>{});
+      }catch(e){}
+    }
+    setSoundBtnState();
+  }
+  document.addEventListener('touchstart',unlockAudio,{passive:true});
+  document.addEventListener('touchend',unlockAudio,{passive:true});
+  document.addEventListener('mousedown',unlockAudio,{passive:true});
+  if(soundBtn){
+    soundBtn.addEventListener('click',async()=>{
+      initSynth();
+      await unlockAudio();
+      if(Tone.context.state==='running'){
+        // Play a short, clearly audible tone so the user can instantly confirm sound is working
+        try{ synth.triggerAttackRelease('C5','8n',undefined,0.9); }catch(e){}
+      }else{
+        alert('Audio is still blocked in this environment (AudioContext state: '+Tone.context.state+').\nIf this page is embedded via an <iframe>, ask the outer page to add allow="autoplay" to the iframe tag, or open this page directly in a standalone browser tab.');
+      }
+    });
+    setSoundBtnState();
+  }
+
+  /* ========== State ========== */
+  let mode=null,midiData=null,totalDur=0,isPlaying=false,baseBPM=120,speed=1.0;
+  let xmlSteps=[],xmlStepIndex=0,xmlTotalBeats=0,flashTimer=null;
+  const stage=document.getElementById('stage'),roll=document.getElementById('roll'),osmdDiv=document.getElementById('osmd');
+  const hint=document.getElementById('hint'),nowNote=document.getElementById('nowNote');
+  const playBtn=document.getElementById('playBtn'),stopBtn=document.getElementById('stopBtn');
+  const progress=document.getElementById('progress'),timeVal=document.getElementById('timeVal');
+  function fmtTime(s){const m=Math.floor(s/60),ss=Math.floor(s%60);return m+':'+String(ss).padStart(2,'0');}
+
+  /* ========== File / URL loading ========== */
+  document.getElementById('fileInput').addEventListener('change',e=>{const f=e.target.files[0];if(f)loadFile(f);});
+  async function loadFile(file){
+    stopAll();const name=file.name.toLowerCase();const buf=await file.arrayBuffer();hint.style.display='none';
+    if(name.endsWith('.mid')||name.endsWith('.midi')){await loadMidiBuffer(buf);saveLastLocal(file.name,'mid',buf);}
+    else if(name.endsWith('.xml')||name.endsWith('.musicxml')){await loadXmlBuffer(buf);saveLastLocal(file.name,'xml',buf);}
+    else if(name.endsWith('.mxl'))alert('.mxl is a compressed format. Please export an uncompressed .musicxml from MuseScore.');
+    else alert('Unsupported format');
+  }
+  async function loadFromUrl(url){
+    url=url.trim();if(!url)return;
+    urlStatus('Downloading…');
     try{
-      const a=new Audio(SILENT_WAV);
-      a.setAttribute('playsinline','');
-      a.muted=false;a.volume=.001;
-      const p=a.play();if(p&&p.catch)p.catch(()=>{});
-    }catch(e){}
-  }
-  setSoundBtnState();
-}
-document.addEventListener('touchstart',unlockAudio,{passive:true});
-document.addEventListener('touchend',unlockAudio,{passive:true});
-document.addEventListener('mousedown',unlockAudio,{passive:true});
-if(soundBtn){
-  soundBtn.addEventListener('click',async()=>{
-    initSynth();
-    await unlockAudio();
-    if(Tone.context.state==='running'){
-      // 播放一个短促、真正能听见的提示音，让用户立刻确认"有没有声音"
-      try{ synth.triggerAttackRelease('C5','8n',undefined,0.9); }catch(e){}
-    }else{
-      alert('当前环境音频仍被阻止（AudioContext state: '+Tone.context.state+'）。\n若本页是通过 <iframe> 嵌入的，请让外层页面给 iframe 标签加上 allow="autoplay" 属性；或直接在浏览器里单独打开本页试试。');
+      const res=await fetch(url);
+      if(!res.ok)throw new Error('HTTP '+res.status);
+      const buf=await res.arrayBuffer();
+      hint.style.display='none';stopAll();
+      const low=url.toLowerCase().split('?')[0];
+      if(low.endsWith('.mid')||low.endsWith('.midi')) await loadMidiBuffer(buf);
+      else if(low.endsWith('.xml')||low.endsWith('.musicxml')) await loadXmlBuffer(buf);
+      else{ // Unknown extension: try to detect by MIDI header
+        const b=new Uint8Array(buf);
+        if(b[0]===0x4D&&b[1]===0x54&&b[2]===0x68) await loadMidiBuffer(buf);
+        else await loadXmlBuffer(buf);
+      }
+      addHistory(url);
+      saveLastSource({type:'url',url});
+      urlStatus('Loaded','ok');
+      document.getElementById('urlModal').classList.remove('open');
+    }catch(err){
+      urlStatus('Load failed: '+err.message+' (likely CORS not enabled or the link is broken)','err');
     }
+  }
+  function urlStatus(m,c=''){const el=document.getElementById('urlStatus');el.textContent=m;el.className='status '+c;}
+
+  /* ========== Remember the last opened score and auto-load it next time ========== */
+  const LAST_KEY='pianoScore.lastSource';
+  function abToB64(buf){
+    let binary='';const bytes=new Uint8Array(buf);const chunk=0x8000;
+    for(let i=0;i<bytes.length;i+=chunk)binary+=String.fromCharCode.apply(null,bytes.subarray(i,i+chunk));
+    return btoa(binary);
+  }
+  function b64ToAb(b64){
+    const binary=atob(b64);const bytes=new Uint8Array(binary.length);
+    for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+    return bytes.buffer;
+  }
+  function saveLastSource(obj){ try{store.set(LAST_KEY,JSON.stringify(obj));}catch(e){} }
+  function saveLastLocal(name,ext,buf){
+    // Skip saving large local files (encoded size may exceed localStorage quota); only URL sources are remembered in that case
+    if(buf.byteLength>3*1024*1024)return;
+    try{ saveLastSource({type:'local',name,ext,dataB64:abToB64(buf)}); }
+    catch(e){ /* Quota exceeded etc. — silently ignore, doesn't affect current playback */ }
+  }
+  async function restoreLastSource(){
+    const raw=store.get(LAST_KEY); if(!raw)return;
+    let last; try{last=JSON.parse(raw);}catch(e){return;}
+    try{
+      if(last.type==='url'&&last.url){
+        document.getElementById('urlInput').value=last.url;
+        await loadFromUrl(last.url);
+      }else if(last.type==='local'&&last.dataB64){
+        const buf=b64ToAb(last.dataB64);
+        hint.style.display='none';
+        if(last.ext==='mid')await loadMidiBuffer(buf);else await loadXmlBuffer(buf);
+        nowNote.style.display='block';nowNote.textContent='Auto-restored: '+(last.name||'last score');
+      }
+    }catch(e){ console.warn('Failed to restore last score',e); }
+  }
+
+  /* ---- MIDI ---- */
+  let rollNotes=[];const TRACK_COLORS=['#5ac8b0','#e0a458','#7aa6ff','#e06a6a','#b98cff'];
+  async function loadMidiBuffer(buf){
+    mode='midi';osmdDiv.style.display='none';roll.style.display='block';
+    midiData=new Midi(buf);
+    baseBPM=(midiData.header.tempos[0]&&midiData.header.tempos[0].bpm)||120;
+    rollNotes=[];totalDur=midiData.duration;
+    midiData.tracks.forEach((tr,ti)=>tr.notes.forEach(n=>rollNotes.push({midi:n.midi,start:n.time,dur:n.duration,track:ti})));
+    drawRollStatic(0);
+    playBtn.disabled=false;stopBtn.disabled=false;progress.disabled=false;
+    timeVal.textContent=fmtTime(0)+' / '+fmtTime(totalDur);nowNote.style.display='none';
+  }
+  function resizeRoll(){roll.width=stage.clientWidth;roll.height=stage.clientHeight;}
+  function drawRollStatic(playSec){
+    if(mode!=='midi')return;resizeRoll();
+    const ctx=roll.getContext('2d'),W=roll.width,H=roll.height;ctx.clearRect(0,0,W,H);
+    if(!rollNotes.length)return;
+    const win=6,t0=playSec-1,t1=t0+win,pxPerSec=W/win,rowH=H/(C8-A0+1);
+    ctx.strokeStyle='#1c2029';
+    for(let m=A0;m<=C8;m++)if(m%12===0){const y=H-(m-A0)*rowH;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+    const phx=(playSec-t0)*pxPerSec;ctx.strokeStyle='#ffffff55';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(phx,0);ctx.lineTo(phx,H);ctx.stroke();
+    for(const n of rollNotes){
+      if(n.start>t1||n.start+n.dur<t0)continue;
+      const x=(n.start-t0)*pxPerSec,w=Math.max(3,n.dur*pxPerSec-1),y=H-(n.midi-A0)*rowH-rowH*0.9;
+      const active=playSec>=n.start&&playSec<=n.start+n.dur;
+      ctx.fillStyle=active?'#fff':TRACK_COLORS[n.track%TRACK_COLORS.length];ctx.globalAlpha=active?1:0.85;
+      ctx.beginPath();ctx.roundRect(x,y,w,rowH*0.85,2);ctx.fill();
+    }
+    ctx.globalAlpha=1;
+  }
+
+  /* ---- MusicXML ---- */
+  let osmd=null,xmlCursorTimer=null;
+  async function loadXmlBuffer(buf){
+    mode='xml';roll.style.display='none';osmdDiv.style.display='block';osmdDiv.innerHTML='';
+    if(!osmd)osmd=new opensheetmusicdisplay.OpenSheetMusicDisplay('osmd',{autoResize:true,drawTitle:true});
+    const content=new TextDecoder().decode(buf);
+    await osmd.load(content);osmd.render();osmd.cursor.show();
+    baseBPM=120;playBtn.disabled=false;stopBtn.disabled=false;progress.disabled=false;progress.value=0;
+    timeVal.textContent='Sheet music mode';nowNote.style.display='block';nowNote.textContent='Ready';
+    buildXmlSteps();
+  }
+
+  /* ---- Pre-compute each cursor step's on-page position + notes, used for click-to-jump ----
+     NOTE: positions are stored relative to the *scrollable content* of #stage (i.e. including
+     the current stage.scrollTop/scrollLeft at build time), not raw viewport coordinates.
+     This way they stay valid even after the page auto-scrolls during playback — otherwise a
+     click made after the view has scrolled would be compared against stale viewport-relative
+     rects and could only ever resolve to steps on the line that was visible when steps were
+     first built (the bug where clicks past the currently playing line failed to jump). */
+  function buildXmlSteps(){
+    xmlSteps=[];xmlStepIndex=0;
+    const cursor=osmd.cursor;
+    cursor.reset();cursor.show();
+    let cumBeats=0;
+    const baseScrollTop=stage.scrollTop,baseScrollLeft=stage.scrollLeft;
+    while(!cursor.iterator.EndReached){
+      const rect=cursor.cursorElement.getBoundingClientRect();
+      const notes=cursor.NotesUnderCursor();
+      const midis=[];let minLen=1;
+      notes.forEach(note=>{
+        if(note.isRest&&note.isRest())return;
+        if(note.Pitch){
+          const midi=note.Pitch.getHalfTone()+12;
+          if(midi>=A0&&midi<=C8)midis.push(midi);
+        }
+        if(note.Length&&note.Length.realValue<minLen&&note.Length.realValue>0)minLen=note.Length.realValue;
+      });
+      xmlSteps.push({
+        x:rect.left+rect.width/2+baseScrollLeft,
+        top:rect.top+baseScrollTop,
+        bottom:rect.bottom+baseScrollTop,
+        beats:cumBeats,midis,lenBeats:minLen
+      });
+      cumBeats+=minLen;
+      cursor.next();
+    }
+    xmlTotalBeats=cumBeats;
+    cursor.reset();
+  }
+  /* Keep the current line positioned slightly above center in the stage, so it isn't hidden behind the bottom transport bar */
+  function scrollScoreToCursor(){
+    const cursor=osmd&&osmd.cursor;
+    if(!cursor||!cursor.cursorElement)return;
+    const stageRect=stage.getBoundingClientRect();
+    const curRect=cursor.cursorElement.getBoundingClientRect();
+    const targetTop=stageRect.top+stageRect.height*0.22;
+    const delta=curRect.top-targetTop;
+    if(Math.abs(delta)>3)stage.scrollBy({top:delta,behavior:'smooth'});
+  }
+  function updateXmlProgressUI(idx){
+    if(!xmlSteps.length)return;
+    progress.value=Math.min(1000,Math.round((idx/Math.max(1,xmlSteps.length-1))*1000));
+    timeVal.textContent=(idx+1)+' / '+xmlSteps.length;
+  }
+  function findNearestXmlStep(clientX,clientY){
+    if(!xmlSteps.length)return 0;
+    // Convert the click's viewport coordinates into the same "content-relative" space used
+    // when xmlSteps were built, by adding the stage's *current* scroll offset.
+    const x=clientX+stage.scrollLeft;
+    const y=clientY+stage.scrollTop;
+    const sameLine=xmlSteps.filter(s=>y>=s.top-8&&y<=s.bottom+8);
+    const pool=sameLine.length?sameLine:xmlSteps;
+    let best=0,bestDist=Infinity;
+    pool.forEach(s=>{
+      const idx=xmlSteps.indexOf(s);
+      const dx=Math.abs(x-s.x);
+      const dy=sameLine.length?0:Math.abs(y-(s.top+s.bottom)/2)*4;
+      const d=dx+dy;
+      if(d<bestDist){bestDist=d;best=idx;}
+    });
+    return best;
+  }
+  function flashKeysForStep(idx){
+    const s=xmlSteps[idx];if(!s)return;
+    clearTimeout(flashTimer);
+    allKeysOff();
+    s.midis.forEach(m=>{keyOn(m);});
+    if(s.midis.length)nowNote.textContent=s.midis.map(noteName).join(' · ');
+    // Stays lit until playback starts or another note is clicked (no auto-clear timeout).
+  }
+  function jumpToXmlStep(idx){
+    if(mode!=='xml'||!osmd||!xmlSteps.length)return;
+    idx=Math.max(0,Math.min(idx,xmlSteps.length-1));
+    xmlStepIndex=idx;
+    const cursor=osmd.cursor;
+    cursor.reset();
+    for(let i=0;i<xmlStepIndex;i++)cursor.next();
+    scrollScoreToCursor();
+    updateXmlProgressUI(xmlStepIndex);
+    flashKeysForStep(xmlStepIndex);
+    const wasPlaying=isPlaying;
+    clearTimeout(xmlCursorTimer);
+    if(wasPlaying){isPlaying=true;playBtn.textContent='⏸ Pause';xmlStep();}
+  }
+  osmdDiv.addEventListener('click',e=>{
+    if(mode!=='xml'||!xmlSteps.length)return;
+    const idx=findNearestXmlStep(e.clientX,e.clientY);
+    jumpToXmlStep(idx);
   });
-  setSoundBtnState();
-}
 
-/* ========== 状态 ========== */
-let mode=null,midiData=null,totalDur=0,isPlaying=false,baseBPM=120,speed=1.0;
-let xmlSteps=[],xmlStepIndex=0,xmlTotalBeats=0,flashTimer=null;
-const stage=document.getElementById('stage'),roll=document.getElementById('roll'),osmdDiv=document.getElementById('osmd');
-const hint=document.getElementById('hint'),nowNote=document.getElementById('nowNote');
-const playBtn=document.getElementById('playBtn'),stopBtn=document.getElementById('stopBtn');
-const progress=document.getElementById('progress'),timeVal=document.getElementById('timeVal');
-function fmtTime(s){const m=Math.floor(s/60),ss=Math.floor(s%60);return m+':'+String(ss).padStart(2,'0');}
-
-/* ========== 文件/URL 加载 ========== */
-document.getElementById('fileInput').addEventListener('change',e=>{const f=e.target.files[0];if(f)loadFile(f);});
-async function loadFile(file){
-  stopAll();const name=file.name.toLowerCase();const buf=await file.arrayBuffer();hint.style.display='none';
-  if(name.endsWith('.mid')||name.endsWith('.midi')){await loadMidiBuffer(buf);saveLastLocal(file.name,'mid',buf);}
-  else if(name.endsWith('.xml')||name.endsWith('.musicxml')){await loadXmlBuffer(buf);saveLastLocal(file.name,'xml',buf);}
-  else if(name.endsWith('.mxl'))alert('.mxl 为压缩格式，请在 MuseScore 导出未压缩的 .musicxml');
-  else alert('不支持的格式');
-}
-async function loadFromUrl(url){
-  url=url.trim();if(!url)return;
-  urlStatus('下载中…');
-  try{
-    const res=await fetch(url);
-    if(!res.ok)throw new Error('HTTP '+res.status);
-    const buf=await res.arrayBuffer();
-    hint.style.display='none';stopAll();
-    const low=url.toLowerCase().split('?')[0];
-    if(low.endsWith('.mid')||low.endsWith('.midi')) await loadMidiBuffer(buf);
-    else if(low.endsWith('.xml')||low.endsWith('.musicxml')) await loadXmlBuffer(buf);
-    else{ // 未知后缀：尝试按 MIDI 头判断
-      const b=new Uint8Array(buf);
-      if(b[0]===0x4D&&b[1]===0x54&&b[2]===0x68) await loadMidiBuffer(buf);
-      else await loadXmlBuffer(buf);
-    }
-    addHistory(url);
-    saveLastSource({type:'url',url});
-    urlStatus('已加载','ok');
-    document.getElementById('urlModal').classList.remove('open');
-  }catch(err){
-    urlStatus('加载失败：'+err.message+'（多半是 CORS 未开放或链接失效）','err');
+  /* ========== Playback ========== */
+  playBtn.addEventListener('click',async()=>{unlockAudio();await Tone.start();initSynth();isPlaying?pause():play();});
+  stopBtn.addEventListener('click',stopAll);
+  function play(){if(mode==='midi')playMidi();else if(mode==='xml')playXml();isPlaying=true;playBtn.textContent='⏸ Pause';}
+  function pause(){if(mode==='midi')Tone.Transport.pause();else clearInterval(xmlCursorTimer);isPlaying=false;playBtn.textContent='▶ Play';}
+  function stopAll(){
+    isPlaying=false;playBtn.textContent='▶ Play';
+    Tone.Transport.stop();Tone.Transport.cancel();clearInterval(xmlCursorTimer);clearTimeout(xmlCursorTimer);
+    if(synth)synth.releaseAll();allKeysOff();
+    if(mode==='midi'){Tone.Transport.seconds=0;drawRollStatic(0);if(totalDur)timeVal.textContent=fmtTime(0)+' / '+fmtTime(totalDur);}
+    if(mode==='xml'&&osmd){osmd.cursor.reset();xmlStepIndex=0;nowNote.textContent='Ready';timeVal.textContent=xmlSteps.length?('1 / '+xmlSteps.length):'Sheet music mode';}
+    progress.value=0;
   }
-}
-function urlStatus(m,c=''){const el=document.getElementById('urlStatus');el.textContent=m;el.className='status '+c;}
-
-/* ========== 记住上次打开的乐谱，下次进入自动打开 ========== */
-const LAST_KEY='pianoScore.lastSource';
-function abToB64(buf){
-  let binary='';const bytes=new Uint8Array(buf);const chunk=0x8000;
-  for(let i=0;i<bytes.length;i+=chunk)binary+=String.fromCharCode.apply(null,bytes.subarray(i,i+chunk));
-  return btoa(binary);
-}
-function b64ToAb(b64){
-  const binary=atob(b64);const bytes=new Uint8Array(binary.length);
-  for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
-  return bytes.buffer;
-}
-function saveLastSource(obj){ try{store.set(LAST_KEY,JSON.stringify(obj));}catch(e){} }
-function saveLastLocal(name,ext,buf){
-  // 本地文件较大时（编码后可能超过 localStorage 配额）就不保存，仅保留在线 URL 的记忆
-  if(buf.byteLength>3*1024*1024)return;
-  try{ saveLastSource({type:'local',name,ext,dataB64:abToB64(buf)}); }
-  catch(e){ /* 配额超限等，静默忽略，不影响当前播放 */ }
-}
-async function restoreLastSource(){
-  const raw=store.get(LAST_KEY); if(!raw)return;
-  let last; try{last=JSON.parse(raw);}catch(e){return;}
-  try{
-    if(last.type==='url'&&last.url){
-      document.getElementById('urlInput').value=last.url;
-      await loadFromUrl(last.url);
-    }else if(last.type==='local'&&last.dataB64){
-      const buf=b64ToAb(last.dataB64);
-      hint.style.display='none';
-      if(last.ext==='mid')await loadMidiBuffer(buf);else await loadXmlBuffer(buf);
-      nowNote.style.display='block';nowNote.textContent='已自动恢复：'+(last.name||'上次乐谱');
-    }
-  }catch(e){ console.warn('恢复上次乐谱失败',e); }
-}
-
-/* ---- MIDI ---- */
-let rollNotes=[];const TRACK_COLORS=['#5ac8b0','#e0a458','#7aa6ff','#e06a6a','#b98cff'];
-async function loadMidiBuffer(buf){
-  mode='midi';osmdDiv.style.display='none';roll.style.display='block';
-  midiData=new Midi(buf);
-  baseBPM=(midiData.header.tempos[0]&&midiData.header.tempos[0].bpm)||120;
-  rollNotes=[];totalDur=midiData.duration;
-  midiData.tracks.forEach((tr,ti)=>tr.notes.forEach(n=>rollNotes.push({midi:n.midi,start:n.time,dur:n.duration,track:ti})));
-  drawRollStatic(0);
-  playBtn.disabled=false;stopBtn.disabled=false;progress.disabled=false;
-  timeVal.textContent=fmtTime(0)+' / '+fmtTime(totalDur);nowNote.style.display='none';
-}
-function resizeRoll(){roll.width=stage.clientWidth;roll.height=stage.clientHeight;}
-function drawRollStatic(playSec){
-  if(mode!=='midi')return;resizeRoll();
-  const ctx=roll.getContext('2d'),W=roll.width,H=roll.height;ctx.clearRect(0,0,W,H);
-  if(!rollNotes.length)return;
-  const win=6,t0=playSec-1,t1=t0+win,pxPerSec=W/win,rowH=H/(C8-A0+1);
-  ctx.strokeStyle='#1c2029';
-  for(let m=A0;m<=C8;m++)if(m%12===0){const y=H-(m-A0)*rowH;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
-  const phx=(playSec-t0)*pxPerSec;ctx.strokeStyle='#ffffff55';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(phx,0);ctx.lineTo(phx,H);ctx.stroke();
-  for(const n of rollNotes){
-    if(n.start>t1||n.start+n.dur<t0)continue;
-    const x=(n.start-t0)*pxPerSec,w=Math.max(3,n.dur*pxPerSec-1),y=H-(n.midi-A0)*rowH-rowH*0.9;
-    const active=playSec>=n.start&&playSec<=n.start+n.dur;
-    ctx.fillStyle=active?'#fff':TRACK_COLORS[n.track%TRACK_COLORS.length];ctx.globalAlpha=active?1:0.85;
-    ctx.beginPath();ctx.roundRect(x,y,w,rowH*0.85,2);ctx.fill();
+  function playMidi(){
+    Tone.Transport.cancel();Tone.Transport.bpm.value=baseBPM;Tone.Transport.playbackRate=speed;
+    midiData.tracks.forEach(tr=>tr.notes.forEach(n=>{
+      Tone.Transport.schedule(time=>{
+        synth.triggerAttackRelease(n.name,n.duration,time,n.velocity);
+        Tone.Draw.schedule(()=>{keyOn(n.midi);nowNote.style.display='block';nowNote.textContent=noteName(n.midi);},time);
+        Tone.Draw.schedule(()=>keyOff(n.midi),time+n.duration);
+      },n.time);
+    }));
+    Tone.Transport.scheduleRepeat(time=>Tone.Draw.schedule(()=>{
+      const t=Tone.Transport.seconds;drawRollStatic(t);
+      progress.value=Math.min(1000,(t/totalDur)*1000);
+      timeVal.textContent=fmtTime(t)+' / '+fmtTime(totalDur);
+      if(t>=totalDur)stopAll();
+    },time),0.03);
+    Tone.Transport.start();
   }
-  ctx.globalAlpha=1;
-}
-
-/* ---- MusicXML ---- */
-let osmd=null,xmlCursorTimer=null;
-async function loadXmlBuffer(buf){
-  mode='xml';roll.style.display='none';osmdDiv.style.display='block';osmdDiv.innerHTML='';
-  if(!osmd)osmd=new opensheetmusicdisplay.OpenSheetMusicDisplay('osmd',{autoResize:true,drawTitle:true});
-  const content=new TextDecoder().decode(buf);
-  await osmd.load(content);osmd.render();osmd.cursor.show();
-  baseBPM=120;playBtn.disabled=false;stopBtn.disabled=false;progress.disabled=false;progress.value=0;
-  timeVal.textContent='五线谱模式';nowNote.style.display='block';nowNote.textContent='就绪';
-  buildXmlSteps();
-}
-
-/* ---- 预计算光标每一步的屏幕位置 + 音符，用于点击跳转 ---- */
-function buildXmlSteps(){
-  xmlSteps=[];xmlStepIndex=0;
-  const cursor=osmd.cursor;
-  cursor.reset();cursor.show();
-  let cumBeats=0;
-  while(!cursor.iterator.EndReached){
-    const rect=cursor.cursorElement.getBoundingClientRect();
-    const notes=cursor.NotesUnderCursor();
-    const midis=[];let minLen=1;
+  function playXml(){xmlStep();}
+  function xmlStep(){
+    const cursor=osmd.cursor;
+    if(cursor.iterator.EndReached){stopAll();return;}
+    allKeysOff();const notes=cursor.NotesUnderCursor();let minLen=1;
     notes.forEach(note=>{
       if(note.isRest&&note.isRest())return;
       if(note.Pitch){
         const midi=note.Pitch.getHalfTone()+12;
-        if(midi>=A0&&midi<=C8)midis.push(midi);
+        if(midi>=A0&&midi<=C8){
+          const nm=noteName(midi);
+          synth.triggerAttackRelease(nm,Math.max(.15,note.Length.realValue*(240/(baseBPM*speed))),undefined,.8);
+          keyOn(midi);nowNote.textContent=nm;
+        }
       }
       if(note.Length&&note.Length.realValue<minLen&&note.Length.realValue>0)minLen=note.Length.realValue;
     });
-    xmlSteps.push({x:rect.left+rect.width/2,top:rect.top,bottom:rect.bottom,beats:cumBeats,midis,lenBeats:minLen});
-    cumBeats+=minLen;
-    cursor.next();
+    /* Auto-scroll the score to follow the cursor, keeping it slightly above center so it isn't hidden behind the bottom transport bar */
+    scrollScoreToCursor();
+    updateXmlProgressUI(xmlStepIndex);
+    const durMs=Math.max(150,minLen*(240000/(baseBPM*speed)));
+    cursor.next();xmlStepIndex++;xmlCursorTimer=setTimeout(xmlStep,durMs);
   }
-  xmlTotalBeats=cumBeats;
-  cursor.reset();
-}
-/* 让当前行保持在舞台偏上位置，避免被底部播放条遮住 */
-function scrollScoreToCursor(){
-  const cursor=osmd&&osmd.cursor;
-  if(!cursor||!cursor.cursorElement)return;
-  const stageRect=stage.getBoundingClientRect();
-  const curRect=cursor.cursorElement.getBoundingClientRect();
-  const targetTop=stageRect.top+stageRect.height*0.22;
-  const delta=curRect.top-targetTop;
-  if(Math.abs(delta)>3)stage.scrollBy({top:delta,behavior:'smooth'});
-}
-function updateXmlProgressUI(idx){
-  if(!xmlSteps.length)return;
-  progress.value=Math.min(1000,Math.round((idx/Math.max(1,xmlSteps.length-1))*1000));
-  timeVal.textContent=(idx+1)+' / '+xmlSteps.length;
-}
-function findNearestXmlStep(clientX,clientY){
-  if(!xmlSteps.length)return 0;
-  const sameLine=xmlSteps.filter(s=>clientY>=s.top-8&&clientY<=s.bottom+8);
-  const pool=sameLine.length?sameLine:xmlSteps;
-  let best=0,bestDist=Infinity;
-  pool.forEach(s=>{
-    const idx=xmlSteps.indexOf(s);
-    const dx=Math.abs(clientX-s.x);
-    const dy=sameLine.length?0:Math.abs(clientY-(s.top+s.bottom)/2)*4;
-    const d=dx+dy;
-    if(d<bestDist){bestDist=d;best=idx;}
-  });
-  return best;
-}
-function flashKeysForStep(idx){
-  const s=xmlSteps[idx];if(!s)return;
-  allKeysOff();
-  s.midis.forEach(m=>{keyOn(m);});
-  if(s.midis.length)nowNote.textContent=s.midis.map(noteName).join(' · ');
-  clearTimeout(flashTimer);
-  if(!isPlaying)flashTimer=setTimeout(()=>{if(!isPlaying)allKeysOff();},650);
-}
-function jumpToXmlStep(idx){
-  if(mode!=='xml'||!osmd||!xmlSteps.length)return;
-  idx=Math.max(0,Math.min(idx,xmlSteps.length-1));
-  xmlStepIndex=idx;
-  const cursor=osmd.cursor;
-  cursor.reset();
-  for(let i=0;i<xmlStepIndex;i++)cursor.next();
-  scrollScoreToCursor();
-  updateXmlProgressUI(xmlStepIndex);
-  flashKeysForStep(xmlStepIndex);
-  const wasPlaying=isPlaying;
-  clearTimeout(xmlCursorTimer);
-  if(wasPlaying){isPlaying=true;playBtn.textContent='⏸ 暂停';xmlStep();}
-}
-osmdDiv.addEventListener('click',e=>{
-  if(mode!=='xml'||!xmlSteps.length)return;
-  const idx=findNearestXmlStep(e.clientX,e.clientY);
-  jumpToXmlStep(idx);
-});
-
-/* ========== 播放 ========== */
-playBtn.addEventListener('click',async()=>{unlockAudio();await Tone.start();initSynth();isPlaying?pause():play();});
-stopBtn.addEventListener('click',stopAll);
-function play(){if(mode==='midi')playMidi();else if(mode==='xml')playXml();isPlaying=true;playBtn.textContent='⏸ 暂停';}
-function pause(){if(mode==='midi')Tone.Transport.pause();else clearInterval(xmlCursorTimer);isPlaying=false;playBtn.textContent='▶ 播放';}
-function stopAll(){
-  isPlaying=false;playBtn.textContent='▶ 播放';
-  Tone.Transport.stop();Tone.Transport.cancel();clearInterval(xmlCursorTimer);clearTimeout(xmlCursorTimer);
-  if(synth)synth.releaseAll();allKeysOff();
-  if(mode==='midi'){Tone.Transport.seconds=0;drawRollStatic(0);if(totalDur)timeVal.textContent=fmtTime(0)+' / '+fmtTime(totalDur);}
-  if(mode==='xml'&&osmd){osmd.cursor.reset();xmlStepIndex=0;nowNote.textContent='就绪';timeVal.textContent=xmlSteps.length?('1 / '+xmlSteps.length):'五线谱模式';}
-  progress.value=0;
-}
-function playMidi(){
-  Tone.Transport.cancel();Tone.Transport.bpm.value=baseBPM;Tone.Transport.playbackRate=speed;
-  midiData.tracks.forEach(tr=>tr.notes.forEach(n=>{
-    Tone.Transport.schedule(time=>{
-      synth.triggerAttackRelease(n.name,n.duration,time,n.velocity);
-      Tone.Draw.schedule(()=>{keyOn(n.midi);nowNote.style.display='block';nowNote.textContent=noteName(n.midi);},time);
-      Tone.Draw.schedule(()=>keyOff(n.midi),time+n.duration);
-    },n.time);
-  }));
-  Tone.Transport.scheduleRepeat(time=>Tone.Draw.schedule(()=>{
-    const t=Tone.Transport.seconds;drawRollStatic(t);
-    progress.value=Math.min(1000,(t/totalDur)*1000);
-    timeVal.textContent=fmtTime(t)+' / '+fmtTime(totalDur);
-    if(t>=totalDur)stopAll();
-  },time),0.03);
-  Tone.Transport.start();
-}
-function playXml(){xmlStep();}
-function xmlStep(){
-  const cursor=osmd.cursor;
-  if(cursor.iterator.EndReached){stopAll();return;}
-  allKeysOff();const notes=cursor.NotesUnderCursor();let minLen=1;
-  notes.forEach(note=>{
-    if(note.isRest&&note.isRest())return;
-    if(note.Pitch){
-      const midi=note.Pitch.getHalfTone()+12;
-      if(midi>=A0&&midi<=C8){
-        const nm=noteName(midi);
-        synth.triggerAttackRelease(nm,Math.max(.15,note.Length.realValue*(240/(baseBPM*speed))),undefined,.8);
-        keyOn(midi);nowNote.textContent=nm;
-      }
+  progress.addEventListener('input',e=>{
+    if(mode==='midi'){
+      if(!totalDur)return;
+      const t=(e.target.value/1000)*totalDur,wasPlaying=isPlaying;
+      Tone.Transport.pause();Tone.Transport.seconds=t;drawRollStatic(t);timeVal.textContent=fmtTime(t)+' / '+fmtTime(totalDur);
+      if(wasPlaying)Tone.Transport.start();
+    }else if(mode==='xml'){
+      if(!xmlSteps.length)return;
+      const idx=Math.round((e.target.value/1000)*(xmlSteps.length-1));
+      jumpToXmlStep(idx);
     }
-    if(note.Length&&note.Length.realValue<minLen&&note.Length.realValue>0)minLen=note.Length.realValue;
   });
-  /* 乐谱跟随光标自动滚动，保持在偏上位置，避免被底部播放条遮挡 */
-  scrollScoreToCursor();
-  updateXmlProgressUI(xmlStepIndex);
-  const durMs=Math.max(150,minLen*(240000/(baseBPM*speed)));
-  cursor.next();xmlStepIndex++;xmlCursorTimer=setTimeout(xmlStep,durMs);
-}
-progress.addEventListener('input',e=>{
-  if(mode==='midi'){
-    if(!totalDur)return;
-    const t=(e.target.value/1000)*totalDur,wasPlaying=isPlaying;
-    Tone.Transport.pause();Tone.Transport.seconds=t;drawRollStatic(t);timeVal.textContent=fmtTime(t)+' / '+fmtTime(totalDur);
-    if(wasPlaying)Tone.Transport.start();
-  }else if(mode==='xml'){
-    if(!xmlSteps.length)return;
-    const idx=Math.round((e.target.value/1000)*(xmlSteps.length-1));
-    jumpToXmlStep(idx);
-  }
-});
-const tempo=document.getElementById('tempo'),tempoVal=document.getElementById('tempoVal');
-tempo.addEventListener('input',e=>{speed=e.target.value/100;tempoVal.textContent=e.target.value+'%';if(mode==='midi')Tone.Transport.playbackRate=speed;});
-window.addEventListener('resize',()=>{if(mode==='midi')drawRollStatic(Tone.Transport.seconds||0);});
+  const tempo=document.getElementById('tempo'),tempoVal=document.getElementById('tempoVal');
+  tempo.addEventListener('input',e=>{speed=e.target.value/100;tempoVal.textContent=e.target.value+'%';if(mode==='midi')Tone.Transport.playbackRate=speed;});
+  window.addEventListener('resize',()=>{if(mode==='midi')drawRollStatic(Tone.Transport.seconds||0);});
 
-/* ========== URL 弹窗 ========== */
-const urlModal=document.getElementById('urlModal');
-document.getElementById('urlBtn').onclick=()=>{urlModal.classList.add('open');renderHistory();document.getElementById('urlInput').focus();};
-document.getElementById('urlClose').onclick=()=>urlModal.classList.remove('open');
-document.getElementById('loadUrlBtn').onclick=()=>loadFromUrl(document.getElementById('urlInput').value);
-document.getElementById('urlInput').addEventListener('keydown',e=>{if(e.key==='Enter')loadFromUrl(e.target.value);});
-document.getElementById('clearHist').onclick=()=>{saveHistory([]);renderHistory();};
-renderHistory();
+  /* ========== URL modal ========== */
+  const urlModal=document.getElementById('urlModal');
+  document.getElementById('urlBtn').onclick=()=>{urlModal.classList.add('open');renderHistory();document.getElementById('urlInput').focus();};
+  document.getElementById('urlClose').onclick=()=>urlModal.classList.remove('open');
+  document.getElementById('loadUrlBtn').onclick=()=>loadFromUrl(document.getElementById('urlInput').value);
+  document.getElementById('urlInput').addEventListener('keydown',e=>{if(e.key==='Enter')loadFromUrl(e.target.value);});
+  document.getElementById('clearHist').onclick=()=>{saveHistory([]);renderHistory();};
+  renderHistory();
 
-/* 页面进入时自动尝试恢复上次打开的乐谱（本地文件或在线 URL） */
-restoreLastSource();
+  /* On page load, automatically try to restore the last opened score (local file or online URL) */
+  restoreLastSource();
 </script>
 </body>
 </html>
