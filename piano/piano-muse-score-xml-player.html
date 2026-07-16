@@ -90,6 +90,26 @@
       #piano{height:72px}
       .wkey .lab{font-size:6px;bottom:1px}
     }
+
+    /* ===== Mobile PORTRAIT adaptation (common: placed on a piano music stand) =====
+       Goal: (1) shrink the full 88-key keyboard so ALL keys fit — no horizontal scroll,
+             no hidden keys; (2) shrink the score so more context (more lines) is visible. */
+    @media (orientation:portrait) and (max-width:820px){
+      header{padding:6px 8px;gap:6px}
+      header h1{font-size:12px}
+      header .sub{display:none}
+      button{padding:5px 8px;font-size:11px;border-radius:6px}
+      .transport{padding:4px 8px;gap:8px}
+      .transport .lbl{font-size:8px}
+      #tempoVal,#timeVal{font-size:10px;min-width:34px}
+      #osmd{padding:4px}
+      #nowNote{font-size:10px;padding:2px 6px;top:4px;left:6px}
+      /* Keyboard: drop the 900px min-width and fit the whole 88 keys into the viewport width */
+      #pianoWrap{padding:2px 2px 4px;overflow-x:hidden}
+      #piano{min-width:0;width:100%;height:58px}
+      .bkey{height:60%}
+      .wkey .lab{font-size:5px;bottom:1px}
+    }
   </style>
 </head>
 <body>
@@ -103,7 +123,7 @@
   </label>
   <button class="btn-ghost" id="urlBtn">🔗 Online URL</button>
   <button class="btn-ghost" id="soundBtn" title="Some mobile browsers / iframe embeds require a manual tap to enable sound" style="display: none">🔇 Enable Sound</button>
-  <button class="btn-ghost" ><a href="piano_88keys_staff.html">Practice Notes</a></button>
+  <button class="btn-ghost" id="PracticeNotes">Practice Notes</button>
 
 </header>
 
@@ -236,6 +256,7 @@
   let audioUnlocked=false;
   const SILENT_WAV='data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
   const soundBtn=document.getElementById('soundBtn');
+  const PracticeNotes=document.getElementById('PracticeNotes');
   function setSoundBtnState(){
     if(!soundBtn)return;
     const running=Tone.context&&Tone.context.state==='running';
@@ -271,6 +292,11 @@
       }
     });
     setSoundBtnState();
+  }
+  if(PracticeNotes){
+    PracticeNotes.addEventListener('click',()=>{
+      window.location.href='piano_88keys_staff.html';
+    });
   }
 
   /* ========== State ========== */
@@ -385,11 +411,15 @@
 
   /* ---- MusicXML ---- */
   let osmd=null,xmlCursorTimer=null;
+  /* On a portrait phone (typically on a music stand) shrink the score so more lines of
+     context are visible at once; on desktop / landscape keep full size. */
+  function isPortraitPhone(){return window.matchMedia('(orientation:portrait) and (max-width:820px)').matches;}
+  function scoreZoom(){return isPortraitPhone()?0.55:1.0;}
   async function loadXmlBuffer(buf){
     mode='xml';roll.style.display='none';osmdDiv.style.display='block';osmdDiv.innerHTML='';
     if(!osmd)osmd=new opensheetmusicdisplay.OpenSheetMusicDisplay('osmd',{autoResize:true,drawTitle:true});
     const content=new TextDecoder().decode(buf);
-    await osmd.load(content);osmd.render();osmd.cursor.show();
+    await osmd.load(content);osmd.zoom=scoreZoom();osmd.render();osmd.cursor.show();
     baseBPM=120;playBtn.disabled=false;stopBtn.disabled=false;progress.disabled=false;progress.value=0;
     timeVal.textContent='Sheet music mode';nowNote.style.display='block';nowNote.textContent='Ready';
     buildXmlSteps();
@@ -561,6 +591,14 @@
   const tempo=document.getElementById('tempo'),tempoVal=document.getElementById('tempoVal');
   tempo.addEventListener('input',e=>{speed=e.target.value/100;tempoVal.textContent=e.target.value+'%';if(mode==='midi')Tone.Transport.playbackRate=speed;});
   window.addEventListener('resize',()=>{if(mode==='midi')drawRollStatic(Tone.Transport.seconds||0);});
+  /* On orientation change, re-apply the portrait/desktop score zoom and rebuild cursor-step
+     positions so click-to-jump stays accurate at the new scale. */
+  let lastZoom=null;
+  window.matchMedia('(orientation:portrait) and (max-width:820px)').addEventListener('change',()=>{
+    if(mode!=='xml'||!osmd)return;
+    const z=scoreZoom();if(z===lastZoom)return;lastZoom=z;
+    osmd.zoom=z;osmd.render();buildXmlSteps();jumpToXmlStep(xmlStepIndex);
+  });
 
   /* ========== URL modal ========== */
   const urlModal=document.getElementById('urlModal');
