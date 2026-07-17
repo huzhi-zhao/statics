@@ -232,11 +232,47 @@
   function allKeysOff(){for(const m in keyEls)keyEls[m].classList.remove('on');}
   buildPiano();
 
-  /* ========== Synth ========== */
-  let synth;
+  /* ========== Piano instrument ==========
+     For a realistic acoustic-piano tone we use Tone.Sampler with the well-known
+     Salamander Grand Piano samples (multi-sampled, pitch-interpolated). If the samples
+     fail to load (offline / CDN blocked) we transparently fall back to a synth that is
+     tuned to sound as piano-like as possible. `synth` always points at whatever is
+     currently usable, so the rest of the code needs no changes. */
+  let synth,sampler,fallbackSynth,samplerReady=false;
+  function makeFallbackSynth(){
+    // FM-ish piano-ish fallback: fast attack, quick decay, low sustain, gentle release.
+    const s=new Tone.PolySynth(Tone.Synth,{
+      oscillator:{type:'triangle'},
+      envelope:{attack:.002,decay:1.2,sustain:.06,release:1.1}
+    });
+    const filt=new Tone.Filter(4500,'lowpass');
+    const rev=new Tone.Reverb({decay:1.6,wet:.18});
+    s.chain(filt,rev,Tone.Destination);
+    s.volume.value=-8;
+    return s;
+  }
   function initSynth(){if(synth)return;
-    synth=new Tone.PolySynth(Tone.Synth,{oscillator:{type:'triangle'},envelope:{attack:.005,decay:.2,sustain:.25,release:.9}}).toDestination();
-    synth.volume.value=-6;
+    fallbackSynth=makeFallbackSynth();
+    synth=fallbackSynth; // usable immediately; upgraded to sampler once samples load
+    const baseUrl='https://tonejs.github.io/audio/salamander/';
+    try{
+      const rev=new Tone.Reverb({decay:1.8,wet:.22}).toDestination();
+      sampler=new Tone.Sampler({
+        urls:{
+          A0:'A0.mp3',C1:'C1.mp3','D#1':'Ds1.mp3','F#1':'Fs1.mp3',
+          A1:'A1.mp3',C2:'C2.mp3','D#2':'Ds2.mp3','F#2':'Fs2.mp3',
+          A2:'A2.mp3',C3:'C3.mp3','D#3':'Ds3.mp3','F#3':'Fs3.mp3',
+          A3:'A3.mp3',C4:'C4.mp3','D#4':'Ds4.mp3','F#4':'Fs4.mp3',
+          A4:'A4.mp3',C5:'C5.mp3','D#5':'Ds5.mp3','F#5':'Fs5.mp3',
+          A5:'A5.mp3',C6:'C6.mp3','D#6':'Ds6.mp3','F#6':'Fs6.mp3',
+          A6:'A6.mp3',C7:'C7.mp3','D#7':'Ds7.mp3','F#7':'Fs7.mp3',
+          A7:'A7.mp3',C8:'C8.mp3'
+        },
+        release:1.2,
+        baseUrl,
+        onload:()=>{ samplerReady=true; synth=sampler; }
+      }).connect(rev);
+    }catch(e){ /* keep fallback synth */ }
   }
 
   /* ========== iOS / Siri / iframe embedding: fix for no sound ==========
@@ -517,10 +553,19 @@
     clearTimeout(xmlCursorTimer);
     if(wasPlaying){isPlaying=true;playBtn.textContent='⏸ Pause';xmlStep();}
   }
-  osmdDiv.addEventListener('click',e=>{
+  /* Play all notes (both hands) of a clicked step, so tapping a moment previews its chord. */
+  function previewXmlStep(idx){
+    const s=xmlSteps[idx];if(!s||!s.midis.length||!synth)return;
+    const dur=Math.max(.6,(s.lenBeats||.25)*(240/(baseBPM*speed)));
+    const names=s.midis.map(noteName);
+    try{ synth.triggerAttackRelease(names,dur,undefined,.8); }catch(e){}
+  }
+  osmdDiv.addEventListener('click',async e=>{
     if(mode!=='xml'||!xmlSteps.length)return;
     const idx=findNearestXmlStep(e.clientX,e.clientY);
     jumpToXmlStep(idx);
+    // Clicking is a genuine user gesture — unlock audio and play the moment's sound.
+    if(!isPlaying){ await unlockAudio(); await Tone.start(); initSynth(); previewXmlStep(idx); }
   });
 
   /* ========== Playback ========== */
