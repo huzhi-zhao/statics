@@ -574,7 +574,10 @@
     scrollScoreToCursor();
     updateXmlProgressUI(xmlStepIndex);
     const durMs=Math.max(150,minLen*(240000/(baseBPM*speed)));
-    cursor.next();xmlStepIndex++;xmlCursorTimer=setTimeout(xmlStep,durMs);
+    /* Keep the visual cursor on the currently-sounding notes for the whole duration,
+       then advance to the next step. Advancing immediately (before the timeout) caused
+       the green cursor to run one note ahead of the lit keys. */
+    xmlCursorTimer=setTimeout(()=>{cursor.next();xmlStepIndex++;xmlStep();},durMs);
   }
   progress.addEventListener('input',e=>{
     if(mode==='midi'){
